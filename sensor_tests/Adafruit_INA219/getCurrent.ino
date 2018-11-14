@@ -3,85 +3,62 @@
 #include <stdarg.h>
 #include <Wire.h>
 #include <Adafruit_INA219.h>
-//#include "Sodaq_DS3231.h"
 #include <Sodaq_DS3231.h>
-//#include "TimerOne.h"
-//#include <time.h>
 #include <timeLib.h>
 
 Adafruit_INA219 ina219;
 const char compile_date[] = __DATE__ " " __TIME__;
 const char file_name[] = __FILE__;
-#if 0
-void p(char *fmt, ... ){
-        char buf[128]; // resulting string limited to 128 chars
-        va_list args;
-        va_start (args, fmt );
-        vsnprintf(buf, 128, fmt, args);
-        va_end (args);
-        Serial.print(buf);
-}
-#endif //0
 
-  #define PST_OFFSET_mS 8*60*60*1000
+const unsigned long mSec_PST_Offset = 28800000; //8*60*60*1000
+const unsigned long mSecInMinute    =    60000;
+const unsigned long mSecInHour      =  3600000;
   uint32_t currentEpochSodaqTimePST_mS = 0;
 
-const unsigned long mSecInMinute =  60000;
-const unsigned long mSecInHour  = 3600000;
 
-char const digit[] = "0123456789";
+
 //Fast uint To Ascii with field size
+char const digit[] = "0123456789";
 char* utoas(int i, char b[],int fill,char sz){
     char* p = b+sz;
 
     memset(b,fill,sz);
-    *p = '\0';
+    *p = (char)'\0';
     do{ //Move back, inserting digits as u go
         *--p = digit[i%10];
         i = i/10;
     }while(i);
     return b;
 }
-
+// Createa a fast debug TimeStamp
 void printDebugTime(void) {
   unsigned long TimeNow_mS = millis();
-  unsigned long TimeNow_sec = TimeNow_mS/1000;
-  //unsigned long hours_mS;     //0-23*60,000
-  //unsigned long hours_rem_mS; //0-23*60,000
-  //unsigned int minutes_mS; //0-59,000
-  unsigned int millisecs;  //0-999
-  byte seconds; //0-59
-  byte minutes; //0-59
-  byte hours;  //0-23
-  char buff[10];//Max Size 9999
-  //setTime(TimeNow_mS);
+  uint32_t millisecs;  //0-999
+  char sBuff[5]; //Max Size 999
+  tmElements_t tm;
+  uint32_t time=TimeNow_mS/1000;
 
- 
-  hours =    hour(TimeNow_sec);//   TimeNow_mS/mSecInHour;
-  //hours_rem_mS =TimeNow_mS-hours*mSecInHour;
-  minutes =  minute(TimeNow_sec);//   hours_rem_mS/(mSecInMinute);
-  //minutes_mS = minutes*mSecInMinute;
-  seconds =  second(TimeNow_sec);//(hours_rem_mS-minutes_mS)/1000;
-  millisecs =TimeNow_mS-(hours*mSecInHour+minutes*mSecInMinute+seconds*1000);
+  //Be fast and accurate : from TimeLib.h 
+  tm.Second = time % 60;
+  time /= 60; // now it is minutes
+  tm.Minute = time % 60;
+  time /= 60; // now it is hours
+  tm.Hour = time % 24;
+  //time /= 24; // now it is days
+
+  millisecs =TimeNow_mS-(tm.Hour*mSecInHour+tm.Minute*mSecInMinute+tm.Second*1000);
   if (millisecs>999) millisecs=999;
 
-  Serial.print(utoas(hours,buff,'0',2));
-  //Serial.print(hours);    
+  Serial.print(utoas(tm.Hour,sBuff,'0',2));
   Serial.print(":");
-  //Serial.print(minutes);
-  //Serial.print("/");
-  Serial.print(utoas(minutes,buff,'0',2));
-
+  Serial.print(utoas(tm.Minute,sBuff,'0',2));
   Serial.print(":"); 
-
-  Serial.print(utoas(seconds,buff,'0',2)); 
-  //Serial.print("/"); 
-  //Serial.print(seconds); 
+  Serial.print(utoas(tm.Second,sBuff,'0',2)); 
   Serial.print("."); 
-  Serial.print(utoas(millisecs,buff,'0',3)); 
+  Serial.print(utoas(millisecs,sBuff,'0',3)); 
   Serial.print(" ");
 }
-
+#if 1
 // This gets the current epoch time (unix time, ie, the number of seconds
 // from January 1, 1970 00:00:00 UTC) and corrects it for the specified time zone
 #define EPOCH_TIME_OFF 946684800
@@ -133,6 +110,7 @@ String formatDateTime_ISO8601_u32(uint32_t epochTime)
     DateTime dt = dtFromEpoch(epochTime);
     return formatDateTime_ISO8601_dt(dt);
 }
+#endif//0
 
 void setup(void) 
 {
@@ -141,15 +119,10 @@ void setup(void)
       // will pause Zero, Leonardo, etc until serial console opens
       delay(1);
   }
-
-  uint32_t currentFrequency;
     
-  //Serial.println("Una219 begin!");
   Serial.print("---Ina219 ");
   Serial.println(compile_date);
   Serial.println(file_name); //Dir and filename
-  //Serial.print(BUILD_TIMESTAMP); 
-  //Serial.println(") ");
 
   // Initialize the INA219.
   // By default the initialization will use the largest range (32V, 2A).  However
@@ -162,7 +135,7 @@ void setup(void)
 
   Serial.println("Reporting Power and current with INA219 0-400mA ...");
 
-  currentEpochSodaqTimePST_mS = rtc.now().getEpoch()-PST_OFFSET_mS;
+  currentEpochSodaqTimePST_mS = rtc.now().getEpoch()-mSec_PST_Offset;
   Serial.print(F("Current RTC time is: "));
   //Serial.print(currentEpochSodaqTime);
   Serial.println(formatDateTime_ISO8601_u32(currentEpochSodaqTimePST_mS));
@@ -174,7 +147,7 @@ void loop(void)
   float busvoltage = 0;
   float current_mA = 0;
   //float loadvoltage = 0;
-  float power_mW = 0;
+  //float power_mW = 0;
   char sBuf[16];
 
   //shuntvoltage = ina219.getShuntVoltage_mV();
